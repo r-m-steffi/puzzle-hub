@@ -13,18 +13,21 @@ export default function RoomPage() {
 
   // Generate a temporary local user ID and random guest name for testing
   const fallbackId = useId();
-  const [currentUser] = useState(() => {
+  const [currentUser] = useState<{ id: string; name: string }>(() => {
     if (typeof window === 'undefined') {
       return { id: 'ssr-user', name: 'Player' };
     }
-    let id = sessionStorage.getItem('puzzle_user_id');
-    let name = sessionStorage.getItem('puzzle_user_name');
-    if (!id) {
-      id = 'user-' + Math.random().toString(36).substring(2, 9);
-      name = 'Player-' + Math.floor(1000 + Math.random() * 9000);
-      sessionStorage.setItem('puzzle_user_id', id);
-      sessionStorage.setItem('puzzle_user_name', name);
-    }
+
+    const savedId = sessionStorage.getItem('puzzle_user_id');
+    const savedName = sessionStorage.getItem('puzzle_user_name');
+
+    const id = savedId || 'user-' + Math.random().toString(36).substring(2, 9);
+    const name = savedName || 'Player-' + Math.floor(1000 + Math.random() * 9000);
+
+    // Save defaults if they were newly generated
+    if (!savedId) sessionStorage.setItem('puzzle_user_id', id);
+    if (!savedName) sessionStorage.setItem('puzzle_user_name', name);
+
     return { id, name };
   });
 
