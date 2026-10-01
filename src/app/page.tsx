@@ -10,9 +10,9 @@ export default function LobbyPage() {
   const [joinCode, setJoinCode] = useState('');
 
   const handleCreateRoom = () => {
-    // Generate a clean 6-character room code (e.g., K9X2P4)
     const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    router.push(`/room/${randomCode}`);
+    // Pass ?host=true so only this creator has invite privileges
+    router.push(`/room/${randomCode}?host=true`);
   };
 
   const handleJoinRoom = (e: React.FormEvent) => {
@@ -26,14 +26,11 @@ export default function LobbyPage() {
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 selection:bg-amber-400 selection:text-slate-950">
       <div className="max-w-md w-full text-center space-y-8">
-        
-        {/* Badge */}
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-800 bg-slate-900/60 text-xs font-semibold text-amber-400">
           <Sparkles className="w-3.5 h-3.5" />
           <span>Realtime Multiplayer Puzzle Hub</span>
         </div>
 
-        {/* Title */}
         <div className="space-y-2">
           <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-slate-50 flex items-center justify-center gap-3">
             <Gamepad2 className="w-10 h-10 text-amber-400" />
@@ -44,12 +41,10 @@ export default function LobbyPage() {
           </p>
         </div>
 
-        {/* Action Card */}
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
-          {/* Create Button */}
           <button
             onClick={handleCreateRoom}
-            className="w-full flex items-center justify-center gap-2 py-3.5 px-4 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-xl shadow-lg transition active:scale-[0.98]"
+            className="w-full flex items-center justify-center gap-2 py-3.5 px-4 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-xl shadow-lg transition active:scale-[0.98] cursor-pointer"
           >
             Create New Room
             <ArrowRight className="w-4 h-4" />
@@ -62,7 +57,6 @@ export default function LobbyPage() {
             </span>
           </div>
 
-          {/* Join Form */}
           <form onSubmit={handleJoinRoom} className="space-y-3">
             <input
               type="text"
@@ -81,7 +75,6 @@ export default function LobbyPage() {
             </button>
           </form>
         </div>
-
       </div>
     </main>
   );
