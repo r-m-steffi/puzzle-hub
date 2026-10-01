@@ -5,6 +5,8 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
+export type GameMode = 'compete' | 'team';
+
 export interface PlayerPeer {
   userId: string;
   displayName: string;
@@ -15,23 +17,33 @@ export interface PlayerPeer {
 
 export function useRealtimeGame(
   roomCode: string,
-  currentUser: { id: string; name: string }
+  currentUser: { id: string; name: string },
+  onTeamWordReceived?: (word: string, contributor: string) => void,
+  onModeChanged?: (mode: GameMode) => void
 ) {
   const [peers, setPeers] = useState<Record<string, PlayerPeer>>({});
   const channelRef = useRef<RealtimeChannel | null>(null);
-  
-  // Keep the latest local game data in a ref so we can send it when new peers arrive
+
   const latestLocalStateRef = useRef<{ gameData: any; score: number; isFinished: boolean }>({
     gameData: null,
     score: 0,
     isFinished: false,
   });
 
-  // Reliable broadcast emitter
+  // Keep callback handlers fresh in refs to avoid re-subscribing channels unnecessarily
+  const onTeamWordReceivedRef = useRef(onTeamWordReceived);
+  useEffect(() => {
+    onTeamWordReceivedRef.current = onTeamWordReceived;
+  }, [onTeamWordReceived]);
+
+  const onModeChangedRef = useRef(onModeChanged);
+  useEffect(() => {
+    onModeChangedRef.current = onModeChanged;
+  }, [onModeChanged]);
+
   const broadcastState = useCallback(
     (gameData: any, score = 0, isFinished = false) => {
       latestLocalStateRef.current = { gameData, score, isFinished };
-
       if (!channelRef.current) return;
 
       channelRef.current.send({
@@ -49,10 +61,32 @@ export function useRealtimeGame(
     [currentUser]
   );
 
+  // Broadcast word found during Co-op Team mode
+  const broadcastTeamWord = useCallback(
+    (word: string) => {
+      if (!channelRef.current) return;
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'team_word_sync',
+        payload: { word, contributor: currentUser.name, userId: currentUser.id },
+      });
+    },
+    [currentUser]
+  );
+
+  // Broadcast mode change from the host
+  const broadcastGameMode = useCallback((mode: GameMode) => {
+    if (!channelRef.current) return;
+    channelRef.current.send({
+      type: 'broadcast',
+      event: 'game_mode_change',
+      payload: { mode },
+    });
+  }, []);
+
   useEffect(() => {
     if (!roomCode || !currentUser.id) return;
 
-    // Supabase Channel with self: false and proper presence tracking
     const channel: RealtimeChannel = supabase.channel(`game_room_${roomCode.toLowerCase()}`, {
       config: {
         broadcast: { self: false, ack: false },
@@ -63,7 +97,6 @@ export function useRealtimeGame(
     // 1. Listen for moves from other players
     channel.on('broadcast', { event: 'player_move' }, ({ payload }) => {
       if (!payload || payload.userId === currentUser.id) return;
-
       setPeers((prev) => ({
         ...prev,
         [payload.userId]: {
@@ -76,7 +109,22 @@ export function useRealtimeGame(
       }));
     });
 
-    // 2. When someone joins, send our current state so they immediately see our score/words!
+    // 2. Listen for Co-op Team shared words
+    channel.on('broadcast', { event: 'team_word_sync' }, ({ payload }) => {
+      if (!payload || payload.userId === currentUser.id) return;
+      if (onTeamWordReceivedRef.current) {
+        onTeamWordReceivedRef.current(payload.word, payload.contributor);
+      }
+    });
+
+    // 3. Listen for Mode Changes from the Host
+    channel.on('broadcast', { event: 'game_mode_change' }, ({ payload }) => {
+      if (onModeChangedRef.current && payload?.mode) {
+        onModeChangedRef.current(payload.mode);
+      }
+    });
+
+    // 4. Sync current state when a new peer joins
     channel.on('presence', { event: 'join' }, ({ key }) => {
       if (key !== currentUser.id && latestLocalStateRef.current.gameData) {
         channel.send({
@@ -91,7 +139,7 @@ export function useRealtimeGame(
       }
     });
 
-    // 3. Remove peer when they close the tab
+    // 5. Clean up disconnected peers
     channel.on('presence', { event: 'leave' }, ({ key }) => {
       setPeers((prev) => {
         const next = { ...prev };
@@ -100,7 +148,6 @@ export function useRealtimeGame(
       });
     });
 
-    // Subscribe and track presence
     channel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
         await channel.track({
@@ -119,5 +166,5 @@ export function useRealtimeGame(
     };
   }, [roomCode, currentUser.id, currentUser.name]);
 
-  return { peers, broadcastState };
+  return { peers, broadcastState, broadcastTeamWord, broadcastGameMode };
 }
